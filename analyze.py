@@ -174,7 +174,9 @@ if __name__ == '__main__':
     plt.grid()
     plt.xlabel("Verstrichene Lebenszeit")
     plt.ylabel("Anzahl von Nachrichten")
-    plt.title("Spammer-Highscore @KBK (c) KBK 2021")
+    plt.title("Spammer-Highscore @KBK (c) KBK {}".format(
+        datetime.now().year,
+    ))
 
     figure.set_size_inches([16,9])
     figure.savefig(args.output, dpi=180)
