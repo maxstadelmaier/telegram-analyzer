@@ -23,6 +23,7 @@ import argparse
 import functools
 from scipy.signal import correlate
 import numpy
+from pyvis.network import Network
 
 class Message:
     def __init__(self, author, message, date):
@@ -151,6 +152,7 @@ if __name__ == '__main__':
     parser.add_argument('-o', dest='output')
     parser.add_argument('-c', dest='correlation', action='store_true')
     parser.add_argument('-t', dest='timeline', action='store_true')
+    parser.add_argument('-g', dest='graph', action='store_true')
     args = parser.parse_args()
 
     chatProtocolFiles = [filename for filename in listdir(args.directory) if isfile(join(args.directory, filename))]
@@ -176,6 +178,75 @@ if __name__ == '__main__':
     ))
     
     contributorDataSortedByNMessages = list(reversed(sorted(contributorData, key=itemgetter(1))))
+
+    correlationMatrix = numpy.zeros((len(contributorDataSortedByNMessages), len(contributorDataSortedByNMessages)))
+
+    indices = range(len(contributorDataSortedByNMessages))
+    mostTriggeredIndices = []
+
+    for i in indices:
+        firstContributorData = contributorDataSortedByNMessages[i]
+        for j in indices:
+            secondContributorData = contributorDataSortedByNMessages[j]
+            firstTimeline = firstContributorData[3]
+            secondTimeline = secondContributorData[3]
+
+            # For cross corellation we need the same timestamps present in both signals.
+            # 1.) Determine common time interval.
+            # 2.) Fill timeline keys per day in this interval.
+            # 3.) Cross-correlate.
+            sortedFirst = sorted(firstTimeline.keys())
+            sortedSecond = sorted(secondTimeline.keys())
+
+            firstCommonDate = max(sortedFirst[0], sortedSecond[0])
+            lastCommonDate = min(sortedFirst[-1], sortedSecond[-1])
+
+            if firstCommonDate not in firstTimeline or firstCommonDate not in secondTimeline or \
+                lastCommonDate not in firstTimeline or lastCommonDate not in secondTimeline:
+                print("Problem with cross corelation of {} and {} - not enough common data.".format(
+                    firstContributorData[0],
+                    secondContributorData[0],
+                ))
+                continue
+
+            lastFirstDate = firstCommonDate
+            lastSecondDate = firstCommonDate
+            date = firstCommonDate
+            commonFirstTimeline = {}
+            commonSecondTimeline = {}
+            while date != lastCommonDate:
+                lastFirstDate = date if date in sortedFirst else lastFirstDate
+                lastSecondDate = date if date in sortedSecond else lastSecondDate
+                date += timedelta(days=1)
+                commonFirstTimeline[date] = firstTimeline[date if date in firstTimeline else lastFirstDate]
+                commonSecondTimeline[date] = secondTimeline[date if date in secondTimeline else lastSecondDate]
+
+            crossCorrelation = correlate(list(map(float, commonFirstTimeline.values())), list(map(float, commonSecondTimeline.values())))
+
+            sumOfCrossCorrelation = functools.reduce(
+                lambda accumulator, addition: accumulator + addition,
+                crossCorrelation,
+            )
+
+            correlationMatrix[i,j] = numpy.log10(1.+sumOfCrossCorrelation/len(commonFirstTimeline.values())/len(commonSecondTimeline.values())/len(crossCorrelation))
+        mostTriggeredIndex = 0
+        mostTriggeredValue = 0.
+        allAreTheSame = True
+        for j in indices:
+            if correlationMatrix[i,j] > mostTriggeredValue:
+                allAreTheSame = False
+                mostTriggeredValue = correlationMatrix[i,j]
+                mostTriggeredIndex = j
+        mostTriggeredIndices.append(mostTriggeredIndex if not allAreTheSame else -1)
+
+    (fullContributorNames,) = list(map(
+        lambda _contributorData: _contributorData[0],
+        contributorDataSortedByNMessages,
+    )),
+    (contributorNames,) = list(map(
+        lambda _contributorData: _contributorData[0][:11] + "..." if len(_contributorData[0]) > 14 else _contributorData[0],
+        contributorDataSortedByNMessages,
+    )),
 
     # Contribution timeline
     if args.timeline:
@@ -206,62 +277,6 @@ if __name__ == '__main__':
     if args.correlation:
         figure = plt.figure()
 
-        correlationMatrix = numpy.zeros((len(contributorDataSortedByNMessages), len(contributorDataSortedByNMessages)))
-
-        indices = range(len(contributorDataSortedByNMessages))
-
-        for i in indices:
-            firstContributorData = contributorDataSortedByNMessages[i]
-            for j in indices:
-                secondContributorData = contributorDataSortedByNMessages[j]
-                firstTimeline = firstContributorData[3]
-                secondTimeline = secondContributorData[3]
-
-                # For cross corellation we need the same timestamps present in both signals.
-                # 1.) Determine common time interval.
-                # 2.) Fill timeline keys per day in this interval.
-                # 3.) Cross-correlate.
-                sortedFirst = sorted(firstTimeline.keys())
-                sortedSecond = sorted(secondTimeline.keys())
-
-                firstCommonDate = max(sortedFirst[0], sortedSecond[0])
-                lastCommonDate = min(sortedFirst[-1], sortedSecond[-1])
-
-                if firstCommonDate not in firstTimeline or firstCommonDate not in secondTimeline or \
-                    lastCommonDate not in firstTimeline or lastCommonDate not in secondTimeline:
-                    print("Problem with cross corelation of {} and {} - not enough common data.".format(
-                        firstContributorData[0],
-                        secondContributorData[0],
-                    ))
-                    continue
-
-                lastFirstDate = firstCommonDate
-                lastSecondDate = firstCommonDate
-                date = firstCommonDate
-                commonFirstTimeline = {}
-                commonSecondTimeline = {}
-                while date != lastCommonDate:
-                    lastFirstDate = date if date in sortedFirst else lastFirstDate
-                    lastSecondDate = date if date in sortedSecond else lastSecondDate
-                    date += timedelta(days=1)
-                    commonFirstTimeline[date] = firstTimeline[date if date in firstTimeline else lastFirstDate]
-                    commonSecondTimeline[date] = secondTimeline[date if date in secondTimeline else lastSecondDate]
-
-                crossCorrelation = correlate(list(map(float, commonFirstTimeline.values())), list(map(float, commonSecondTimeline.values())))
-
-                sumOfCrossCorrelation = functools.reduce(
-                    lambda accumulator, addition: accumulator + addition,
-                    crossCorrelation,
-                )
-
-                correlationMatrix[i,j] = numpy.log10(1.+sumOfCrossCorrelation/len(commonFirstTimeline.values())/len(commonSecondTimeline.values())/len(crossCorrelation))
-
-        (contributorNames,) = list(map(
-            lambda _contributorData: _contributorData[0][:11] + "..." if len(_contributorData[0]) > 14 else _contributorData[0],
-            contributorDataSortedByNMessages,
-        )),
-        print(contributorNames)
-
         plt.subplots_adjust(bottom=0.15, left=0.15)
 
         plt.xticks(indices, contributorNames, rotation=90)
@@ -280,3 +295,24 @@ if __name__ == '__main__':
 
         figure.set_size_inches([10.5,9])
         figure.savefig(args.output, dpi=180)
+
+    # Trigger graph.
+    if args.graph:
+        result = "@startuml\nskinparam linetype ortho\n".encode('utf-8')
+
+        print("Most Triggered:")
+
+        for j in indices[:30]:
+            if mostTriggeredIndices[j] == -1:
+                continue
+            print(fullContributorNames[j], "is most triggered by", fullContributorNames[mostTriggeredIndices[j]])
+            result += "({}) <-- ({})\n".format(
+                fullContributorNames[j],
+                fullContributorNames[mostTriggeredIndices[j]],
+            ).encode('utf-8')
+
+        result += "@enduml\n".encode('utf-8')
+
+        with open(args.output, "wb") as f:
+            f.write(result)
+            f.close()
