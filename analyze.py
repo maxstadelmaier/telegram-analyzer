@@ -248,7 +248,6 @@ if __name__ == '__main__':
                     commonSecondTimeline[date] = secondTimeline[date if date in secondTimeline else lastSecondDate]
 
                 crossCorrelation = correlate(list(map(float, commonFirstTimeline.values())), list(map(float, commonSecondTimeline.values())))
-                crossCorrelation = numpy.abs(crossCorrelation)
 
                 sumOfCrossCorrelation = functools.reduce(
                     lambda accumulator, addition: accumulator + addition,
