@@ -17,10 +17,12 @@ from os import listdir
 from os.path import isfile, join
 from html.parser import HTMLParser
 from operator import itemgetter
-from datetime import datetime
+from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 import argparse
 import functools
+from scipy.signal import correlate
+import numpy
 
 class Message:
     def __init__(self, author, message, date):
@@ -76,7 +78,7 @@ class ChatParser(HTMLParser):
 
     def handle_data(self, data):
         if self.makeNextDataName:
-            self.messageAuthor = data.strip()
+            self.messageAuthor = data.replace(" via @gif", "").strip()
             self.makeNextDataName = False
 
         if self.makeNextDataText:
@@ -147,6 +149,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('KBK chat analysis tool')
     parser.add_argument('-d', dest='directory')
     parser.add_argument('-o', dest='output')
+    parser.add_argument('-c', dest='correlation', action='store_true')
+    parser.add_argument('-t', dest='timeline', action='store_true')
     args = parser.parse_args()
 
     chatProtocolFiles = [filename for filename in listdir(args.directory) if isfile(join(args.directory, filename))]
@@ -173,25 +177,107 @@ if __name__ == '__main__':
     
     contributorDataSortedByNMessages = list(reversed(sorted(contributorData, key=itemgetter(1))))
 
-    figure = plt.figure()
+    # Contribution timeline
+    if args.timeline:
+        figure = plt.figure()
 
-    for contributorData in contributorDataSortedByNMessages[:20]:
-        contributor = contributorData[0]
-        nMessages = contributorData[1]
-        nWords = contributorData[2]
-        timeline = contributorData[3]
+        for contributorData in contributorDataSortedByNMessages[:20]:
+            contributor = contributorData[0]
+            nMessages = contributorData[1]
+            nWords = contributorData[2]
+            timeline = contributorData[3]
 
-        print("Contributor", contributor, "has contributed", nMessages, "messages with", nWords, "words.")
+            print("Contributor", contributor, "has contributed", nMessages, "messages with", nWords, "words.")
 
-        plt.plot_date(timeline.keys(), timeline.values(), '', label=contributor)
+            plt.plot_date(timeline.keys(), timeline.values(), '', label=contributor)
 
-    plt.legend()
-    plt.grid()
-    plt.xlabel("Verstrichene Lebenszeit")
-    plt.ylabel("Anzahl von Nachrichten")
-    plt.title("Spammer-Highscore @KBK (c) KBK {}".format(
-        datetime.now().year,
-    ))
+        plt.legend()
+        plt.grid()
+        plt.xlabel("Verstrichene Lebenszeit")
+        plt.ylabel("Anzahl von Nachrichten")
+        plt.title("Spammer-Highscore @KBK (c) KBK {}".format(
+            datetime.now().year,
+        ))
 
-    figure.set_size_inches([16,9])
-    figure.savefig(args.output, dpi=180)
+        figure.set_size_inches([16,9])
+        figure.savefig(args.output, dpi=180)
+
+    # Cross correlation matrix.
+    if args.correlation:
+        figure = plt.figure()
+
+        correlationMatrix = numpy.zeros((len(contributorDataSortedByNMessages), len(contributorDataSortedByNMessages)))
+
+        indices = range(len(contributorDataSortedByNMessages))
+
+        for i in indices:
+            firstContributorData = contributorDataSortedByNMessages[i]
+            for j in indices:
+                secondContributorData = contributorDataSortedByNMessages[j]
+                firstTimeline = firstContributorData[3]
+                secondTimeline = secondContributorData[3]
+
+                # For cross corellation we need the same timestamps present in both signals.
+                # 1.) Determine common time interval.
+                # 2.) Fill timeline keys per day in this interval.
+                # 3.) Cross-correlate.
+                sortedFirst = sorted(firstTimeline.keys())
+                sortedSecond = sorted(secondTimeline.keys())
+
+                firstCommonDate = max(sortedFirst[0], sortedSecond[0])
+                lastCommonDate = min(sortedFirst[-1], sortedSecond[-1])
+
+                if firstCommonDate not in firstTimeline or firstCommonDate not in secondTimeline or \
+                    lastCommonDate not in firstTimeline or lastCommonDate not in secondTimeline:
+                    print("Problem with cross corelation of {} and {} - not enough common data.".format(
+                        firstContributorData[0],
+                        secondContributorData[0],
+                    ))
+                    continue
+
+                lastFirstDate = firstCommonDate
+                lastSecondDate = firstCommonDate
+                date = firstCommonDate
+                commonFirstTimeline = {}
+                commonSecondTimeline = {}
+                while date != lastCommonDate:
+                    lastFirstDate = date if date in sortedFirst else lastFirstDate
+                    lastSecondDate = date if date in sortedSecond else lastSecondDate
+                    date += timedelta(days=1)
+                    commonFirstTimeline[date] = firstTimeline[date if date in firstTimeline else lastFirstDate]
+                    commonSecondTimeline[date] = secondTimeline[date if date in secondTimeline else lastSecondDate]
+
+                crossCorrelation = correlate(list(map(float, commonFirstTimeline.values())), list(map(float, commonSecondTimeline.values())))
+                crossCorrelation = numpy.abs(crossCorrelation)
+
+                sumOfCrossCorrelation = functools.reduce(
+                    lambda accumulator, addition: accumulator + addition,
+                    crossCorrelation,
+                )
+
+                correlationMatrix[i,j] = numpy.log10(1.+sumOfCrossCorrelation/len(commonFirstTimeline.values())/len(commonSecondTimeline.values())/len(crossCorrelation))
+
+        (contributorNames,) = list(map(
+            lambda _contributorData: _contributorData[0][:11] + "..." if len(_contributorData[0]) > 14 else _contributorData[0],
+            contributorDataSortedByNMessages,
+        )),
+        print(contributorNames)
+
+        plt.subplots_adjust(bottom=0.15, left=0.15)
+
+        plt.xticks(indices, contributorNames, rotation=90)
+        plt.yticks(indices, contributorNames)
+
+        plt.title("Trigger-Cross-Correlation (log10-scale) @KBK (c) KBK {}".format(
+            datetime.now().year,
+        ))
+
+        colorPlot = plt.pcolor(indices, indices, correlationMatrix, cmap="RdBu_r", edgecolor='k')
+        axes = plt.gca()
+
+        axes.tick_params(axis='both', which='major', pad=3)
+        figure.colorbar(colorPlot, ax=axes, extend='max')
+
+
+        figure.set_size_inches([10.5,9])
+        figure.savefig(args.output, dpi=180)
