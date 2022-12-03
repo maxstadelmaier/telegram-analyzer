@@ -231,7 +231,7 @@ if __name__ == '__main__':
                 crossCorrelation,
             )
 
-            correlationMatrix[i,j] = numpy.log10(1.+sumOfCrossCorrelation/len(commonFirstTimeline.values())/len(commonSecondTimeline.values())/len(crossCorrelation))
+            correlationMatrix[i,j] = numpy.log10(1.+sumOfCrossCorrelation/len(commonFirstTimeline.values())/len(commonSecondTimeline.values()))
         mostTriggeredIndex = 0
         mostTriggeredValue = 0.
         allAreTheSame = True
