@@ -133,9 +133,6 @@ class ChatParser(HTMLParser):
                 else:
                     messagesPerDate[dateTimeOfMessage.date()] = 1
 
-        if not datetime.now().date() in messagesPerDate:
-            messagesPerDate[datetime.now().date()] = 0
-
         sortedMessagesPerDate = sorted(messagesPerDate)
 
         totalMessages = 0
@@ -221,6 +218,12 @@ if __name__ == '__main__':
                 commonFirstTimeline[date] = firstTimeline[date if date in firstTimeline else lastFirstDate]
                 commonSecondTimeline[date] = secondTimeline[date if date in secondTimeline else lastSecondDate]
 
+            if len(commonFirstTimeline) < 1 or len(commonSecondTimeline) < 1:
+                print("Problem with cross corelation of {} and {} - not enough common data.".format(
+                    firstContributorData[0],
+                    secondContributorData[0],
+                ))
+                continue
             crossCorrelation = correlate(list(map(float, commonFirstTimeline.values())), list(map(float, commonSecondTimeline.values())))
 
             sumOfCrossCorrelation = functools.reduce(
