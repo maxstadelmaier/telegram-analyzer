@@ -157,8 +157,15 @@ if __name__ == '__main__':
     parser.add_argument('-c', dest='correlation', action='store_true')
     parser.add_argument('-t', dest='timeline', action='store_true')
     parser.add_argument('-g', dest='graph', action='store_true')
+    parser.add_argument('-amnesty', dest='start_date')
     parser.add_argument('-rmnpc', dest='remove_npcs', action='store_true')
     args = parser.parse_args()
+
+    if args.output is None:
+        args.output = "out.png"
+
+    if args.start_date is not None:
+        args.start_date = datetime.strptime(args.start_date, '%Y-%m-%d')
 
     chatProtocolFiles = [filename for filename in listdir(args.directory) if isfile(join(args.directory, filename))]
 
@@ -276,20 +283,37 @@ if __name__ == '__main__':
             nWords = contributorData[2]
             timeline = contributorData[3]
 
+            x = timeline.keys()
+            y = timeline.values()
+            x = numpy.array(list(x))
+            y = numpy.array(list(y))
+
+            if args.start_date is not None:
+                for i in range(len(x)):
+                    if x[i] > args.start_date.date():
+                        startIndex = i
+                        break
+                print(startIndex)
+                y = y - y[startIndex]
+
             print("Contributor", contributor, "has contributed", nMessages, "messages with", nWords, "words.")
 
-            plt.plot_date(timeline.keys(), timeline.values(), '', label=contributor)
+            plt.plot_date(x, y, '', label=contributor, zorder=y[-1])
 
         plt.legend()
-        # plt.grid()
-        plt.xlabel("Verstrichene Lebenszeit")
+        plt.grid(linestyle=":", color="silver")
+        plt.xlabel("Lebenszeit")
+        # plt.yscale("log")
         plt.ylabel("Anzahl von Nachrichten")
-        plt.title("Spammer-Highscore @KBK (c) KBK {}".format(
-            datetime.now().year,
-        ))
+        plt.title(f"Spammer-Highscore @KBK (c) KBK {datetime.now().year}-{datetime.now().month}")
 
+        if args.start_date is not None:
+            plt.xlim(args.start_date, )
+            plt.ylabel(f"Anzahl von Nachrichten seit {args.start_date.year}-{args.start_date.month:0>2}-{args.start_date.day:0>2}")
+
+        plt.ylim(0, )
         figure.set_size_inches([16, 9])
-        figure.savefig(args.output, dpi=180)
+        figure.savefig("timeline_"+args.output, dpi=180)
 
     # Cross correlation matrix.
     if args.correlation:
@@ -311,7 +335,7 @@ if __name__ == '__main__':
         figure.colorbar(colorPlot, ax=axes, extend='max')
 
         figure.set_size_inches([10.5, 9])
-        figure.savefig(args.output, dpi=180)
+        figure.savefig("corr_"+args.output, dpi=180)
 
     # Trigger graph.
     if args.graph:
