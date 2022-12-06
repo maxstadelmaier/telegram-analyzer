@@ -19,11 +19,13 @@ from html.parser import HTMLParser
 from operator import itemgetter
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
+import matplotlib
 import argparse
 import functools
 from scipy.signal import correlate
 import numpy
-from pyvis.network import Network
+# from pyvis.network import Network
+
 
 class Message:
     def __init__(self, author, message, date):
@@ -41,10 +43,11 @@ class Message:
             self.date = self.date.split(' UTC')[0]
             return datetime.strptime(self.date, '%d.%m.%Y %H:%M:%S')
 
+
 class ChatParser(HTMLParser):
     def __init__(self):
         super().__init__()
-        
+
         self.messageAuthor = None
         self.messageText = None
         self.messageDate = None
@@ -109,7 +112,7 @@ class ChatParser(HTMLParser):
                 self.contributorMessages(name),
             ),
         )
-    
+
     def contributorNumberOfWords(self, name):
         return functools.reduce(
             lambda accumulator, addition: accumulator + addition,
@@ -142,14 +145,19 @@ class ChatParser(HTMLParser):
             timeline[date] = totalMessages
 
         return timeline
-    
+
+
 if __name__ == '__main__':
+
+    plt.rcParams.update(matplotlib.rcParamsDefault)
+
     parser = argparse.ArgumentParser('KBK chat analysis tool')
     parser.add_argument('-d', dest='directory')
     parser.add_argument('-o', dest='output')
     parser.add_argument('-c', dest='correlation', action='store_true')
     parser.add_argument('-t', dest='timeline', action='store_true')
     parser.add_argument('-g', dest='graph', action='store_true')
+    parser.add_argument('-rmnpc', dest='remove_npcs', action='store_true')
     args = parser.parse_args()
 
     chatProtocolFiles = [filename for filename in listdir(args.directory) if isfile(join(args.directory, filename))]
@@ -173,7 +181,11 @@ if __name__ == '__main__':
         ],
         chatParser.contributingNames(),
     ))
-    
+
+    # npc remover
+    if args.remove_npcs:
+        contributorData = [c for c in contributorData if c[1] > 50]
+
     contributorDataSortedByNMessages = list(reversed(sorted(contributorData, key=itemgetter(1))))
 
     correlationMatrix = numpy.zeros((len(contributorDataSortedByNMessages), len(contributorDataSortedByNMessages)))
@@ -199,7 +211,7 @@ if __name__ == '__main__':
             lastCommonDate = min(sortedFirst[-1], sortedSecond[-1])
 
             if firstCommonDate not in firstTimeline or firstCommonDate not in secondTimeline or \
-                lastCommonDate not in firstTimeline or lastCommonDate not in secondTimeline:
+                    lastCommonDate not in firstTimeline or lastCommonDate not in secondTimeline:
                 print("Problem with cross corelation of {} and {} - not enough common data.".format(
                     firstContributorData[0],
                     secondContributorData[0],
@@ -224,21 +236,23 @@ if __name__ == '__main__':
                     secondContributorData[0],
                 ))
                 continue
-            crossCorrelation = correlate(list(map(float, commonFirstTimeline.values())), list(map(float, commonSecondTimeline.values())))
+            crossCorrelation = correlate(list(map(float, commonFirstTimeline.values())),
+                                         list(map(float, commonSecondTimeline.values())))
 
             sumOfCrossCorrelation = functools.reduce(
                 lambda accumulator, addition: accumulator + addition,
                 crossCorrelation,
             )
 
-            correlationMatrix[i,j] = numpy.log10(1.+sumOfCrossCorrelation/len(commonFirstTimeline.values())/len(commonSecondTimeline.values()))
+            correlationMatrix[i, j] = numpy.log10(
+                1.+sumOfCrossCorrelation/len(commonFirstTimeline.values())/len(commonSecondTimeline.values()))
         mostTriggeredIndex = 0
         mostTriggeredValue = 0.
         allAreTheSame = True
         for j in indices:
-            if correlationMatrix[i,j] > mostTriggeredValue:
+            if correlationMatrix[i, j] > mostTriggeredValue:
                 allAreTheSame = False
-                mostTriggeredValue = correlationMatrix[i,j]
+                mostTriggeredValue = correlationMatrix[i, j]
                 mostTriggeredIndex = j
         mostTriggeredIndices.append(mostTriggeredIndex if not allAreTheSame else -1)
 
@@ -247,7 +261,8 @@ if __name__ == '__main__':
         contributorDataSortedByNMessages,
     )),
     (contributorNames,) = list(map(
-        lambda _contributorData: _contributorData[0][:11] + "..." if len(_contributorData[0]) > 14 else _contributorData[0],
+        lambda _contributorData: _contributorData[0][:11]
+        + "..." if len(_contributorData[0]) > 14 else _contributorData[0],
         contributorDataSortedByNMessages,
     )),
 
@@ -255,7 +270,7 @@ if __name__ == '__main__':
     if args.timeline:
         figure = plt.figure()
 
-        for contributorData in contributorDataSortedByNMessages[:20]:
+        for contributorData in contributorDataSortedByNMessages[:10]:
             contributor = contributorData[0]
             nMessages = contributorData[1]
             nWords = contributorData[2]
@@ -266,14 +281,14 @@ if __name__ == '__main__':
             plt.plot_date(timeline.keys(), timeline.values(), '', label=contributor)
 
         plt.legend()
-        plt.grid()
+        # plt.grid()
         plt.xlabel("Verstrichene Lebenszeit")
         plt.ylabel("Anzahl von Nachrichten")
         plt.title("Spammer-Highscore @KBK (c) KBK {}".format(
             datetime.now().year,
         ))
 
-        figure.set_size_inches([16,9])
+        figure.set_size_inches([16, 9])
         figure.savefig(args.output, dpi=180)
 
     # Cross correlation matrix.
@@ -295,8 +310,7 @@ if __name__ == '__main__':
         axes.tick_params(axis='both', which='major', pad=3)
         figure.colorbar(colorPlot, ax=axes, extend='max')
 
-
-        figure.set_size_inches([10.5,9])
+        figure.set_size_inches([10.5, 9])
         figure.savefig(args.output, dpi=180)
 
     # Trigger graph.
