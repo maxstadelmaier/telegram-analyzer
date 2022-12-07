@@ -202,7 +202,8 @@ if __name__ == '__main__':
             # shorten and normalize array with number of messages
             y = y[-len(x):]
             oldMessages = y[0]
-            y = y-oldMessages
+            y -= oldMessages
+
             c[1] = c[1] - oldMessages
             c[3] = dict(zip(x, y))
 
