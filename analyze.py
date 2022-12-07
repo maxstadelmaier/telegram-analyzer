@@ -24,6 +24,7 @@ import argparse
 import functools
 from scipy.signal import correlate
 import numpy
+from cycler import cycler
 # from pyvis.network import Network
 
 
@@ -166,6 +167,8 @@ if __name__ == '__main__':
 
     if args.start_date is not None:
         args.start_date = datetime.strptime(args.start_date, '%Y-%m-%d')
+    # else:
+    #     args.start_date = datetime(1990,1,1)
 
     chatProtocolFiles = [filename for filename in listdir(args.directory) if isfile(join(args.directory, filename))]
 
@@ -188,6 +191,23 @@ if __name__ == '__main__':
         ],
         chatParser.contributingNames(),
     ))
+
+    if args.start_date is not None:
+        for c in contributorData:
+            timeline = c[3]
+            x = numpy.array(list(timeline.keys()))
+            y = numpy.array(list(timeline.values()))
+
+            # select only timestamps after amnesty date
+            x = list(filter(lambda day: day > args.start_date.date(), x))
+            if len(x) == 0:
+                continue
+            # shorten and normalize array with number of messages
+            y = y[-len(x):]
+            oldMessages = y[0]
+            y = y-oldMessages
+            c[1] = c[1] - oldMessages
+            c[3] = dict(zip(x, y))
 
     # npc remover
     if args.remove_npcs:
@@ -275,26 +295,21 @@ if __name__ == '__main__':
 
     # Contribution timeline
     if args.timeline:
+        # better color scheme
+        plt.rcParams['axes.prop_cycle'] = cycler('color', plt.get_cmap('tab20c').colors)
         figure = plt.figure()
 
-        for contributorData in contributorDataSortedByNMessages[:10]:
+        for contributorData in contributorDataSortedByNMessages[:20]:
             contributor = contributorData[0]
             nMessages = contributorData[1]
             nWords = contributorData[2]
             timeline = contributorData[3]
 
-            x = timeline.keys()
-            y = timeline.values()
-            x = numpy.array(list(x))
-            y = numpy.array(list(y))
+            x = numpy.array(list(timeline.keys()))
+            y = numpy.array(list(timeline.values()))
 
-            if args.start_date is not None:
-                for i in range(len(x)):
-                    if x[i] > args.start_date.date():
-                        startIndex = i
-                        break
-                print(startIndex)
-                y = y - y[startIndex]
+            if y[-1] < 250 and args.remove_npcs:
+                continue
 
             print("Contributor", contributor, "has contributed", nMessages, "messages with", nWords, "words.")
 
@@ -303,13 +318,13 @@ if __name__ == '__main__':
         plt.legend()
         plt.grid(linestyle=":", color="silver")
         plt.xlabel("Lebenszeit")
-        # plt.yscale("log")
         plt.ylabel("Anzahl von Nachrichten")
         plt.title(f"Spammer-Highscore @KBK (c) KBK {datetime.now().year}-{datetime.now().month}")
 
         if args.start_date is not None:
             plt.xlim(args.start_date, )
-            plt.ylabel(f"Anzahl von Nachrichten seit {args.start_date.year}-{args.start_date.month:0>2}-{args.start_date.day:0>2}")
+            plt.ylabel(
+                f"Anzahl von Nachrichten seit {args.start_date.year}-{args.start_date.month:0>2}-{args.start_date.day:0>2}")
 
         plt.ylim(0, )
         figure.set_size_inches([16, 9])
