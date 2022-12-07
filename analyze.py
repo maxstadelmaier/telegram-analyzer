@@ -25,7 +25,6 @@ import functools
 from scipy.signal import correlate
 import numpy
 from cycler import cycler
-# from pyvis.network import Network
 
 
 class Message:
@@ -167,8 +166,6 @@ if __name__ == '__main__':
 
     if args.start_date is not None:
         args.start_date = datetime.strptime(args.start_date, '%Y-%m-%d')
-    # else:
-    #     args.start_date = datetime(1990,1,1)
 
     chatProtocolFiles = [filename for filename in listdir(args.directory) if isfile(join(args.directory, filename))]
 
