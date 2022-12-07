@@ -201,11 +201,15 @@ if __name__ == '__main__':
             # select only timestamps after amnesty date
             x = list(filter(lambda day: day > args.start_date.date(), x))
             if len(x) == 0:
+                c[1] = 0
+                c[3] = {}
                 continue
             # shorten and normalize array with number of messages
             y = y[-len(x):]
             oldMessages = y[0]
             y = y-oldMessages
+
+            print(oldMessages, c[0])
             c[1] = c[1] - oldMessages
             c[3] = dict(zip(x, y))
 
@@ -307,9 +311,6 @@ if __name__ == '__main__':
 
             x = numpy.array(list(timeline.keys()))
             y = numpy.array(list(timeline.values()))
-
-            if y[-1] < 250 and args.remove_npcs:
-                continue
 
             print("Contributor", contributor, "has contributed", nMessages, "messages with", nWords, "words.")
 
